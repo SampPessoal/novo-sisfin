@@ -1,0 +1,1014 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlserver"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// MULTI-TENANT & AUTH
+// ============================================================
+
+model GrupoEmpresarial {
+  id           Int      @id @default(autoincrement())
+  nome         String   @db.NVarChar(255)
+  descricao    String?  @db.NVarChar(500)
+  ativo        Boolean  @default(true)
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  empresas Empresa[]
+
+  @@map("grupos_empresariais")
+}
+
+model Empresa {
+  id              Int      @id @default(autoincrement())
+  grupoId         Int?
+  razaoSocial     String   @db.NVarChar(255)
+  nomeFantasia    String?  @db.NVarChar(255)
+  cnpj            String   @unique @db.VarChar(18)
+  inscricaoEstadual String? @db.VarChar(20)
+  inscricaoMunicipal String? @db.VarChar(20)
+  regimeTributario String? @db.VarChar(30)
+  endereco        String?  @db.NVarChar(500)
+  cidade          String?  @db.NVarChar(100)
+  estado          String?  @db.VarChar(2)
+  cep             String?  @db.VarChar(10)
+  telefone        String?  @db.VarChar(20)
+  email           String?  @db.VarChar(255)
+  logoUrl         String?  @db.VarChar(500)
+  config          String?  @db.NVarChar(Max)
+  ativo           Boolean  @default(true)
+  criadoEm        DateTime @default(now())
+  atualizadoEm    DateTime @updatedAt
+
+  grupo           GrupoEmpresarial? @relation(fields: [grupoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  usuarios        UsuarioEmpresa[]
+  perfis          Perfil[]
+  fornecedores    Fornecedor[]
+  clientes        Cliente[]
+  categorias      CategoriaFinanceira[]
+  centrosCusto    CentroCusto[]
+  planoContas     PlanoContas[]
+  contasBancarias ContaBancaria[]
+  transferencias  TransferenciaBancaria[]
+  contasPagar     ContaPagar[]
+  contasReceber   ContaReceber[]
+  contratos       Contrato[]
+  emprestimos     Emprestimo[]
+  parcelamentosImposto ParcelamentoImposto[]
+  solicitacoesViagem   SolicitacaoViagem[]
+  preLancamentos       PreLancamento[]
+  auditLogs            AuditLog[]
+  notasFiscais         NotaFiscal[]
+  conciliacoes         ConciliacaoBancaria[]
+  comissaoRegras       ComissaoRegra[]
+  apuracoesImposto     ApuracaoImposto[]
+  notificacoes         Notificacao[]
+
+  @@map("empresas")
+}
+
+model Usuario {
+  id               Int      @id @default(autoincrement())
+  nome             String   @db.NVarChar(255)
+  email            String   @unique @db.VarChar(255)
+  senha            String   @db.VarChar(255)
+  telefone         String?  @db.VarChar(20)
+  telefoneWhatsApp String?  @db.VarChar(20)
+  twoFactorSecret  String?  @db.VarChar(255)
+  twoFactorAtivo   Boolean  @default(false)
+  ativo            Boolean  @default(true)
+  ultimoLogin      DateTime?
+  criadoEm         DateTime @default(now())
+  atualizadoEm     DateTime @updatedAt
+
+  empresas            UsuarioEmpresa[]
+  contasPagarCriadas  ContaPagar[]          @relation("CriadorCP")
+  aprovacoesCP        AprovacaoCP[]
+  contasReceberCriadas ContaReceber[]       @relation("CriadorCR")
+  solicitacoesViagem  SolicitacaoViagem[]
+  preLancamentos      PreLancamento[]
+  auditLogs           AuditLog[]
+  whatsappAutorizado  WhatsAppAutorizado?
+  comissoes           Comissao[]
+  metasVendedor       MetaVendedor[]
+  notificacoes        Notificacao[]
+
+  @@map("usuarios")
+}
+
+model UsuarioEmpresa {
+  id        Int    @id @default(autoincrement())
+  usuarioId Int
+  empresaId Int
+  perfil    String @db.VarChar(30)
+  perfilId  Int?
+
+  usuario   Usuario @relation(fields: [usuarioId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  empresa   Empresa @relation(fields: [empresaId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  perfilRef Perfil? @relation(fields: [perfilId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([usuarioId, empresaId])
+  @@map("usuarios_empresas")
+}
+
+// ============================================================
+// RBAC - PERFIS E PERMISSOES
+// ============================================================
+
+model Perfil {
+  id          Int      @id @default(autoincrement())
+  empresaId   Int?
+  nome        String   @db.NVarChar(100)
+  descricao   String?  @db.NVarChar(255)
+  sistema     Boolean  @default(false)
+  ativo       Boolean  @default(true)
+  criadoEm    DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  empresa    Empresa?          @relation(fields: [empresaId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  permissoes PerfilPermissao[]
+  usuarios   UsuarioEmpresa[]
+
+  @@unique([empresaId, nome])
+  @@map("perfis")
+}
+
+model Permissao {
+  id        Int     @id @default(autoincrement())
+  modulo    String  @db.VarChar(50)
+  acao      String  @db.VarChar(50)
+  descricao String? @db.NVarChar(255)
+
+  perfis PerfilPermissao[]
+
+  @@unique([modulo, acao])
+  @@map("permissoes")
+}
+
+model PerfilPermissao {
+  id          Int @id @default(autoincrement())
+  perfilId    Int
+  permissaoId Int
+
+  perfil    Perfil    @relation(fields: [perfilId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  permissao Permissao @relation(fields: [permissaoId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([perfilId, permissaoId])
+  @@map("perfis_permissoes")
+}
+
+// ============================================================
+// NOTIFICACOES
+// ============================================================
+
+model Notificacao {
+  id          Int       @id @default(autoincrement())
+  empresaId   Int
+  usuarioId   Int
+  tipo        String    @db.VarChar(50)
+  titulo      String    @db.NVarChar(255)
+  mensagem    String    @db.NVarChar(500)
+  link        String?   @db.VarChar(255)
+  lida        Boolean   @default(false)
+  lidaEm      DateTime?
+  criadoEm    DateTime  @default(now())
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([usuarioId, lida])
+  @@index([empresaId, criadoEm])
+  @@map("notificacoes")
+}
+
+model RefreshToken {
+  id        Int      @id @default(autoincrement())
+  token     String   @unique @db.VarChar(500)
+  usuarioId Int
+  expiraEm  DateTime
+  criadoEm  DateTime @default(now())
+
+  @@map("refresh_tokens")
+}
+
+model WhatsAppAutorizado {
+  id        Int    @id @default(autoincrement())
+  usuarioId Int    @unique
+  numero    String @unique @db.VarChar(20)
+  ativo     Boolean @default(true)
+
+  usuario   Usuario @relation(fields: [usuarioId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("whatsapp_autorizados")
+}
+
+// ============================================================
+// CADASTROS BASE
+// ============================================================
+
+model Fornecedor {
+  id                 Int      @id @default(autoincrement())
+  empresaId          Int
+  tipo               String   @default("PJ") @db.VarChar(2) // PJ ou PF
+
+  // Dados cadastrais
+  razaoSocial        String   @db.NVarChar(255)
+  nomeFantasia       String?  @db.NVarChar(255)
+  cnpjCpf            String   @db.VarChar(18)
+  inscricaoEstadual  String?  @db.VarChar(20)
+  inscricaoMunicipal String?  @db.VarChar(20)
+  regimeTributario   String?  @db.VarChar(30) // SIMPLES_NACIONAL, LUCRO_PRESUMIDO, LUCRO_REAL, MEI
+  contribuinteIcms   String?  @db.VarChar(20) // CONTRIBUINTE, NAO_CONTRIBUINTE, ISENTO
+  segmento           String?  @db.VarChar(50) // Serviços, Material, Aluguel, etc.
+
+  // Endereço (padrão NFe)
+  cep                String?  @db.VarChar(10)
+  logradouro         String?  @db.NVarChar(300)
+  numero             String?  @db.VarChar(20)
+  complemento        String?  @db.NVarChar(100)
+  bairro             String?  @db.NVarChar(100)
+  cidade             String?  @db.NVarChar(100)
+  estado             String?  @db.VarChar(2)
+
+  // Contatos
+  telefone           String?  @db.VarChar(20)
+  celular            String?  @db.VarChar(20)
+  whatsapp           String?  @db.VarChar(20)
+  email              String?  @db.VarChar(255)
+  emailFinanceiro    String?  @db.VarChar(255)
+  contatoPrincipal   String?  @db.NVarChar(150)
+  website            String?  @db.VarChar(255)
+
+  // Dados bancários
+  banco              String?  @db.VarChar(10)
+  nomeBanco          String?  @db.NVarChar(100)
+  agencia            String?  @db.VarChar(10)
+  contaBancaria      String?  @db.VarChar(20)
+  tipoConta          String?  @db.VarChar(2)  // CC ou CP
+  chavePix           String?  @db.VarChar(255)
+  tipoChavePix       String?  @db.VarChar(20) // CPF, CNPJ, EMAIL, TELEFONE, ALEATORIA
+  titularConta       String?  @db.NVarChar(255)
+
+  // Dados fiscais - retenções (true = retém)
+  retIss             Boolean  @default(false)
+  retIrrf            Boolean  @default(false)
+  retPis             Boolean  @default(false)
+  retCofins          Boolean  @default(false)
+  retCsll            Boolean  @default(false)
+  retInss            Boolean  @default(false)
+
+  // Comercial
+  condicaoPagamento  String?  @db.VarChar(30) // A_VISTA, 30, 30_60, 30_60_90, PERSONALIZADO
+
+  // Legado (migração)
+  endereco           String?  @db.NVarChar(500)
+
+  observacoes        String?  @db.NVarChar(Max)
+  ativo              Boolean  @default(true)
+  criadoEm           DateTime @default(now())
+  atualizadoEm       DateTime @updatedAt
+
+  empresa      Empresa              @relation(fields: [empresaId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  contasPagar  ContaPagar[]
+  contratos    Contrato[]           @relation("ContratoFornecedor")
+  contatos     FornecedorContato[]
+  enderecos    FornecedorEndereco[]
+
+  @@unique([empresaId, cnpjCpf])
+  @@index([empresaId, ativo])
+  @@map("fornecedores")
+}
+
+model FornecedorContato {
+  id             Int      @id @default(autoincrement())
+  fornecedorId   Int
+  nome           String   @db.NVarChar(150)
+  departamento   String?  @db.VarChar(50) // FINANCEIRO, COMERCIAL, TECNICO, DIRETORIA, COMPRAS, JURIDICO
+  cargo          String?  @db.NVarChar(100)
+  telefone       String?  @db.VarChar(20)
+  celular        String?  @db.VarChar(20)
+  whatsapp       String?  @db.VarChar(20)
+  email          String?  @db.VarChar(255)
+  principal      Boolean  @default(false)
+  observacoes    String?  @db.NVarChar(500)
+  ativo          Boolean  @default(true)
+  criadoEm       DateTime @default(now())
+  atualizadoEm   DateTime @updatedAt
+
+  fornecedor Fornecedor @relation(fields: [fornecedorId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([fornecedorId])
+  @@map("fornecedores_contatos")
+}
+
+model FornecedorEndereco {
+  id             Int      @id @default(autoincrement())
+  fornecedorId   Int
+  tipo           String   @db.VarChar(20) // PRINCIPAL, COBRANCA, ENTREGA, FILIAL, CORRESPONDENCIA
+  cep            String?  @db.VarChar(10)
+  logradouro     String?  @db.NVarChar(300)
+  numero         String?  @db.VarChar(20)
+  complemento    String?  @db.NVarChar(100)
+  bairro         String?  @db.NVarChar(100)
+  cidade         String?  @db.NVarChar(100)
+  estado         String?  @db.VarChar(2)
+  principal      Boolean  @default(false)
+  observacoes    String?  @db.NVarChar(500)
+  ativo          Boolean  @default(true)
+  criadoEm       DateTime @default(now())
+  atualizadoEm   DateTime @updatedAt
+
+  fornecedor Fornecedor @relation(fields: [fornecedorId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([fornecedorId])
+  @@map("fornecedores_enderecos")
+}
+
+model Cliente {
+  id           Int      @id @default(autoincrement())
+  empresaId    Int
+  razaoSocial  String   @db.NVarChar(255)
+  nomeFantasia String?  @db.NVarChar(255)
+  cnpjCpf      String   @db.VarChar(18)
+  tipo         String   @default("PJ") @db.VarChar(2)
+  endereco     String?  @db.NVarChar(500)
+  cidade       String?  @db.NVarChar(100)
+  estado       String?  @db.VarChar(2)
+  cep          String?  @db.VarChar(10)
+  telefone     String?  @db.VarChar(20)
+  email        String?  @db.VarChar(255)
+  observacoes  String?  @db.NVarChar(Max)
+  ativo        Boolean  @default(true)
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  empresa        Empresa         @relation(fields: [empresaId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  contasReceber  ContaReceber[]
+  contratos      Contrato[]      @relation("ContratoCliente")
+  viagensCliente ViagemCliente[]
+
+  @@unique([empresaId, cnpjCpf])
+  @@map("clientes")
+}
+
+model CategoriaFinanceira {
+  id        Int      @id @default(autoincrement())
+  empresaId Int
+  nome      String   @db.NVarChar(100)
+  tipo      String   @db.VarChar(10) // CP, CR, AMBOS
+  grupoDRE  String?  @db.NVarChar(100)
+  ativo     Boolean  @default(true)
+  criadoEm  DateTime @default(now())
+
+  empresa       Empresa        @relation(fields: [empresaId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  contasPagar   ContaPagar[]
+  contasReceber ContaReceber[]
+
+  @@map("categorias_financeiras")
+}
+
+model CentroCusto {
+  id        Int      @id @default(autoincrement())
+  empresaId Int
+  codigo    String   @db.VarChar(20)
+  nome      String   @db.NVarChar(100)
+  ativo     Boolean  @default(true)
+  criadoEm  DateTime @default(now())
+
+  empresa       Empresa             @relation(fields: [empresaId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  contasPagar   ContaPagar[]
+  rateios       RateioCentroCusto[]
+  contasReceber ContaReceber[]
+
+  @@unique([empresaId, codigo])
+  @@map("centros_custo")
+}
+
+model PlanoContas {
+  id        Int      @id @default(autoincrement())
+  empresaId Int
+  codigo    String   @db.VarChar(20)
+  descricao String   @db.NVarChar(255)
+  nivel     Int
+  paiId     Int?
+  tipo      String   @db.VarChar(20) // RECEITA, DESPESA, ATIVO, PASSIVO
+  ativo     Boolean  @default(true)
+  criadoEm  DateTime @default(now())
+
+  empresa   Empresa      @relation(fields: [empresaId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  pai       PlanoContas? @relation("PlanoContasHierarquia", fields: [paiId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  filhos    PlanoContas[] @relation("PlanoContasHierarquia")
+
+  @@unique([empresaId, codigo])
+  @@map("plano_contas")
+}
+
+model ContaBancaria {
+  id          Int      @id @default(autoincrement())
+  empresaId   Int
+  banco       String   @db.VarChar(10)
+  nomeBanco   String   @db.NVarChar(100)
+  agencia     String   @db.VarChar(10)
+  conta       String   @db.VarChar(20)
+  tipoConta   String   @db.VarChar(20) // CORRENTE, POUPANCA
+  saldoInicial Decimal @default(0) @db.Decimal(18, 2)
+  ativo       Boolean  @default(true)
+  criadoEm    DateTime @default(now())
+
+  empresa       Empresa              @relation(fields: [empresaId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  conciliacoes  ConciliacaoBancaria[]
+  transferenciasOrigem  TransferenciaBancaria[] @relation("TransfOrigem")
+  transferenciasDestino TransferenciaBancaria[] @relation("TransfDestino")
+
+  @@map("contas_bancarias")
+}
+
+// ============================================================
+// TRANSFERENCIAS BANCARIAS
+// ============================================================
+
+model TransferenciaBancaria {
+  id                Int           @id @default(autoincrement())
+  empresaId         Int
+  contaOrigemId     Int
+  contaDestinoId    Int
+  valor             Decimal       @db.Decimal(18, 2)
+  data              DateTime      @db.Date
+  descricao         String?       @db.NVarChar(500)
+  status            String        @default("PENDENTE") @db.VarChar(30)
+  criadoEm          DateTime      @default(now())
+  atualizadoEm      DateTime      @updatedAt
+
+  empresa           Empresa       @relation(fields: [empresaId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  contaOrigem       ContaBancaria @relation("TransfOrigem", fields: [contaOrigemId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  contaDestino      ContaBancaria @relation("TransfDestino", fields: [contaDestinoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([empresaId, data])
+  @@map("transferencias_bancarias")
+}
+
+// ============================================================
+// CONTAS A PAGAR
+// ============================================================
+
+model ContaPagar {
+  id               Int       @id @default(autoincrement())
+  empresaId        Int
+  fornecedorId     Int?
+  categoriaId      Int?
+  centroCustoId    Int?
+  criadorId        Int
+  descricao        String    @db.NVarChar(500)
+  valor            Decimal   @db.Decimal(18, 2)
+  dataEmissao      DateTime? @db.Date
+  dataVencimento   DateTime  @db.Date
+  dataPagamento    DateTime? @db.Date
+  valorPago        Decimal?  @db.Decimal(18, 2)
+  status           String    @default("PENDENTE") @db.VarChar(30)
+  origemLancamento String    @default("MANUAL") @db.VarChar(30)
+  recorrencia      String    @default("UNICA") @db.VarChar(20)
+  recorrenciaFim   DateTime? @db.Date
+  parcelaAtual     Int?
+  totalParcelas    Int?
+  cpPaiId          Int?
+  contratoId       Int?
+  observacoes      String?   @db.NVarChar(Max)
+  comprovanteUrl   String?   @db.VarChar(500)
+  codigoBarras     String?   @db.VarChar(100)
+  criadoEm         DateTime  @default(now())
+  atualizadoEm     DateTime  @updatedAt
+
+  empresa      Empresa              @relation(fields: [empresaId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  fornecedor   Fornecedor?          @relation(fields: [fornecedorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  categoria    CategoriaFinanceira? @relation(fields: [categoriaId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  centroCusto  CentroCusto?         @relation(fields: [centroCustoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  criador      Usuario              @relation("CriadorCP", fields: [criadorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  cpPai        ContaPagar?          @relation("ParcelasCP", fields: [cpPaiId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  parcelas     ContaPagar[]         @relation("ParcelasCP")
+  contrato     Contrato?            @relation(fields: [contratoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  aprovacoes   AprovacaoCP[]
+  rateios      RateioCentroCusto[]
+  conciliacaoItem ConciliacaoItem?
+
+  @@index([empresaId, dataVencimento])
+  @@index([empresaId, status])
+  @@index([empresaId, contratoId])
+  @@map("contas_pagar")
+}
+
+model AprovacaoCP {
+  id           Int      @id @default(autoincrement())
+  contaPagarId Int
+  aprovadorId  Int
+  acao         String   @db.VarChar(20) // APROVADO, REJEITADO
+  observacao   String?  @db.NVarChar(500)
+  criadoEm     DateTime @default(now())
+
+  contaPagar ContaPagar @relation(fields: [contaPagarId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  aprovador  Usuario    @relation(fields: [aprovadorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("aprovacoes_cp")
+}
+
+model RateioCentroCusto {
+  id            Int     @id @default(autoincrement())
+  contaPagarId  Int
+  centroCustoId Int
+  percentual    Decimal @db.Decimal(5, 2)
+  valor         Decimal @db.Decimal(18, 2)
+
+  contaPagar  ContaPagar  @relation(fields: [contaPagarId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  centroCusto CentroCusto @relation(fields: [centroCustoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("rateios_centro_custo")
+}
+
+// ============================================================
+// CONTAS A RECEBER
+// ============================================================
+
+model ContaReceber {
+  id             Int       @id @default(autoincrement())
+  empresaId      Int
+  clienteId      Int?
+  categoriaId    Int?
+  centroCustoId  Int?
+  criadorId      Int
+  descricao      String    @db.NVarChar(500)
+  valor          Decimal   @db.Decimal(18, 2)
+  dataEmissao    DateTime? @db.Date
+  dataVencimento DateTime  @db.Date
+  dataRecebimento DateTime? @db.Date
+  valorRecebido  Decimal?  @db.Decimal(18, 2)
+  status         String    @default("PENDENTE") @db.VarChar(30)
+  origemLancamento String  @default("MANUAL") @db.VarChar(30)
+  notaFiscalId   Int?
+  observacoes    String?   @db.NVarChar(Max)
+  comprovanteUrl String?   @db.VarChar(500)
+  asaasId        String?   @db.VarChar(100)
+  linkPagamento  String?   @db.VarChar(500)
+  criadoEm       DateTime  @default(now())
+  atualizadoEm   DateTime  @updatedAt
+
+  empresa      Empresa              @relation(fields: [empresaId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  cliente      Cliente?             @relation(fields: [clienteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  categoria    CategoriaFinanceira? @relation(fields: [categoriaId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  centroCusto  CentroCusto?         @relation(fields: [centroCustoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  criador      Usuario              @relation("CriadorCR", fields: [criadorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  notaFiscal   NotaFiscal?          @relation(fields: [notaFiscalId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  conciliacaoItem ConciliacaoItem?
+
+  @@index([empresaId, dataVencimento])
+  @@index([empresaId, status])
+  @@map("contas_receber")
+}
+
+// ============================================================
+// CONTRATOS
+// ============================================================
+
+model Contrato {
+  id              Int       @id @default(autoincrement())
+  empresaId       Int
+  tipo            String    @db.VarChar(20) // CLIENTE, FORNECEDOR
+  clienteId       Int?
+  fornecedorId    Int?
+  numero          String?   @db.VarChar(50)
+  descricao       String    @db.NVarChar(500)
+  valor           Decimal   @db.Decimal(18, 2)
+  vigenciaInicio  DateTime  @db.Date
+  vigenciaFim     DateTime  @db.Date
+  indiceReajuste  String?   @db.VarChar(30)
+  percentualReajuste Decimal? @db.Decimal(5, 2)
+  clausulas       String?   @db.NVarChar(Max)
+  status          String    @default("ATIVO") @db.VarChar(20)
+  criadoEm        DateTime  @default(now())
+  atualizadoEm    DateTime  @updatedAt
+
+  empresa    Empresa     @relation(fields: [empresaId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  cliente    Cliente?    @relation("ContratoCliente", fields: [clienteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  fornecedor Fornecedor? @relation("ContratoFornecedor", fields: [fornecedorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  parcelas    ParcelaContrato[]
+  aditivos    AditivoContrato[]
+  arquivos    ArquivoContrato[]
+  contasPagar ContaPagar[]
+
+  @@map("contratos")
+}
+
+model ParcelaContrato {
+  id            Int       @id @default(autoincrement())
+  contratoId    Int
+  numero        Int
+  valor         Decimal   @db.Decimal(18, 2)
+  dataVencimento DateTime @db.Date
+  status        String    @default("PENDENTE") @db.VarChar(20)
+
+  contrato Contrato @relation(fields: [contratoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("parcelas_contrato")
+}
+
+model AditivoContrato {
+  id          Int      @id @default(autoincrement())
+  contratoId  Int
+  descricao   String   @db.NVarChar(500)
+  novoValor   Decimal? @db.Decimal(18, 2)
+  novaVigencia DateTime? @db.Date
+  criadoEm    DateTime @default(now())
+
+  contrato Contrato @relation(fields: [contratoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("aditivos_contrato")
+}
+
+model ArquivoContrato {
+  id         Int      @id @default(autoincrement())
+  contratoId Int
+  nome       String   @db.NVarChar(255)
+  url        String   @db.VarChar(500)
+  criadoEm   DateTime @default(now())
+
+  contrato Contrato @relation(fields: [contratoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("arquivos_contrato")
+}
+
+// ============================================================
+// COMISSOES
+// ============================================================
+
+model ComissaoRegra {
+  id           Int     @id @default(autoincrement())
+  empresaId    Int
+  nome         String  @db.NVarChar(100)
+  percentual   Decimal @db.Decimal(5, 2)
+  tipo         String  @db.VarChar(30) // PERCENTUAL_VENDA, VALOR_FIXO
+  ativo        Boolean @default(true)
+
+  empresa   Empresa    @relation(fields: [empresaId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  comissoes Comissao[]
+
+  @@map("comissao_regras")
+}
+
+model MetaVendedor {
+  id            Int      @id @default(autoincrement())
+  colaboradorId Int
+  periodo       String   @db.VarChar(7) // YYYY-MM
+  valorMeta     Decimal  @db.Decimal(18, 2)
+  valorRealizado Decimal @default(0) @db.Decimal(18, 2)
+  criadoEm      DateTime @default(now())
+
+  colaborador Usuario @relation(fields: [colaboradorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([colaboradorId, periodo])
+  @@map("metas_vendedor")
+}
+
+model Comissao {
+  id            Int      @id @default(autoincrement())
+  colaboradorId Int
+  regraId       Int?
+  referencia    String?  @db.NVarChar(255)
+  valor         Decimal  @db.Decimal(18, 2)
+  percentual    Decimal? @db.Decimal(5, 2)
+  status        String   @default("PENDENTE") @db.VarChar(20)
+  dataPagamento DateTime? @db.Date
+  criadoEm      DateTime @default(now())
+
+  colaborador Usuario        @relation(fields: [colaboradorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  regra       ComissaoRegra? @relation(fields: [regraId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("comissoes")
+}
+
+// ============================================================
+// BOLETOS / NFE
+// ============================================================
+
+model NotaFiscal {
+  id            Int      @id @default(autoincrement())
+  empresaId     Int
+  tipo          String   @db.VarChar(10) // NFE, NFSE
+  numero        String?  @db.VarChar(20)
+  serie         String?  @db.VarChar(5)
+  chaveAcesso   String?  @db.VarChar(60)
+  status        String   @default("EMITIDA") @db.VarChar(20)
+  valorTotal    Decimal  @db.Decimal(18, 2)
+  dataEmissao   DateTime @db.Date
+  xmlUrl        String?  @db.VarChar(500)
+  pdfUrl        String?  @db.VarChar(500)
+  plugnotasId   String?  @db.VarChar(100)
+  criadoEm      DateTime @default(now())
+  atualizadoEm  DateTime @updatedAt
+
+  empresa       Empresa        @relation(fields: [empresaId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  contasReceber ContaReceber[]
+
+  @@map("notas_fiscais")
+}
+
+// ============================================================
+// VIAGENS
+// ============================================================
+
+model SolicitacaoViagem {
+  id                Int       @id @default(autoincrement())
+  empresaId         Int
+  colaboradorId     Int
+  destino           String    @db.NVarChar(255)
+  dataInicio        DateTime  @db.Date
+  dataFim           DateTime  @db.Date
+  objetivo          String    @db.NVarChar(500)
+  estimativaDespesas Decimal  @db.Decimal(18, 2)
+  valorAdiantamento Decimal?  @db.Decimal(18, 2)
+  chavePix          String?   @db.VarChar(100)
+  dadosBancarios    String?   @db.NVarChar(500)
+  status            String    @default("SOLICITADA") @db.VarChar(30)
+  observacoes       String?   @db.NVarChar(Max)
+  criadoEm          DateTime  @default(now())
+  atualizadoEm      DateTime  @updatedAt
+
+  empresa       Empresa          @relation(fields: [empresaId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  colaborador   Usuario          @relation(fields: [colaboradorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  clientes      ViagemCliente[]
+  despesas      DespesaViagem[]
+
+  @@index([empresaId, status])
+  @@map("solicitacoes_viagem")
+}
+
+model ViagemCliente {
+  id        Int @id @default(autoincrement())
+  viagemId  Int
+  clienteId Int
+
+  viagem  SolicitacaoViagem @relation(fields: [viagemId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  cliente Cliente           @relation(fields: [clienteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([viagemId, clienteId])
+  @@map("viagens_clientes")
+}
+
+model DespesaViagem {
+  id              Int       @id @default(autoincrement())
+  viagemId        Int
+  preLancamentoId Int?
+  descricao       String    @db.NVarChar(500)
+  valor           Decimal   @db.Decimal(18, 2)
+  data            DateTime  @db.Date
+  tipoDespesa     String    @db.VarChar(30)
+  comprovanteUrl  String?   @db.VarChar(500)
+  criadoEm        DateTime  @default(now())
+
+  viagem        SolicitacaoViagem @relation(fields: [viagemId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  preLancamento PreLancamento?    @relation(fields: [preLancamentoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("despesas_viagem")
+}
+
+// ============================================================
+// CAIXA DE ENTRADA (WhatsApp + Upload + OCR)
+// ============================================================
+
+model Comprovante {
+  id             Int      @id @default(autoincrement())
+  nomeOriginal   String   @db.NVarChar(255)
+  pathStorage    String   @db.VarChar(500)
+  mimeType       String   @db.VarChar(50)
+  tamanho        Int
+  hashMD5        String?  @db.VarChar(32)
+  dataRecebimento DateTime @default(now())
+
+  preLancamento PreLancamento?
+
+  @@map("comprovantes")
+}
+
+model PreLancamento {
+  id             Int       @id @default(autoincrement())
+  empresaId      Int
+  usuarioId      Int
+  comprovanteId  Int       @unique
+  origem         String    @db.VarChar(20) // WHATSAPP, UPLOAD_WEB, EMAIL
+  status         String    @default("RASCUNHO") @db.VarChar(30)
+  dadosOCR       String?   @db.NVarChar(Max) // JSON
+  confiancaOCR   Int?      // 0-100
+
+  // campos extraidos / editados
+  dataDocumento  DateTime? @db.Date
+  cnpjEmissor    String?   @db.VarChar(18)
+  razaoSocialEmissor String? @db.NVarChar(255)
+  valor          Decimal?  @db.Decimal(18, 2)
+  descricao      String?   @db.NVarChar(500)
+  localidade     String?   @db.NVarChar(100)
+
+  // classificacao
+  tipoDespesa    String?   @db.VarChar(30)
+  categoriaId    Int?
+  centroCustoId  Int?
+  clienteId      Int?
+
+  aprovadoPor    Int?
+  aprovadoEm     DateTime?
+  motivoRejeicao String?   @db.NVarChar(500)
+  criadoEm       DateTime  @default(now())
+  atualizadoEm   DateTime  @updatedAt
+
+  empresa      Empresa      @relation(fields: [empresaId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  usuario      Usuario      @relation(fields: [usuarioId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  comprovante  Comprovante  @relation(fields: [comprovanteId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  despesasViagem DespesaViagem[]
+
+  @@index([empresaId, status])
+  @@map("pre_lancamentos")
+}
+
+// ============================================================
+// EMPRESTIMOS
+// ============================================================
+
+model Emprestimo {
+  id                  Int       @id @default(autoincrement())
+  empresaId           Int
+  tipo                String    @db.VarChar(20) // TOMADO, CONCEDIDO
+  credorDevedor       String    @db.NVarChar(255)
+  cnpjCpfCredorDevedor String?  @db.VarChar(18)
+  valorPrincipal      Decimal   @db.Decimal(18, 2)
+  taxaJuros           Decimal   @db.Decimal(8, 4)
+  tipoTaxa            String    @db.VarChar(20) // MENSAL, ANUAL
+  indexador           String?   @db.VarChar(20) // CDI, SELIC, FIXA
+  sistemaAmortizacao  String    @db.VarChar(10) // PRICE, SAC
+  numeroParcelas      Int
+  periodicidade       String    @db.VarChar(20) // MENSAL, TRIMESTRAL, SEMESTRAL, ANUAL
+  dataContratacao     DateTime  @db.Date
+  dataVencimentoFinal DateTime  @db.Date
+  saldoDevedor        Decimal   @db.Decimal(18, 2)
+  status              String    @default("ATIVO") @db.VarChar(20)
+  contratoReferencia  String?   @db.NVarChar(100)
+  observacoes         String?   @db.NVarChar(Max)
+  centroCustoId       Int?
+  criadoEm            DateTime  @default(now())
+  atualizadoEm        DateTime  @updatedAt
+
+  empresa   Empresa             @relation(fields: [empresaId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  parcelas  ParcelaEmprestimo[]
+
+  @@map("emprestimos")
+}
+
+model ParcelaEmprestimo {
+  id              Int       @id @default(autoincrement())
+  emprestimoId    Int
+  numero          Int
+  dataVencimento  DateTime  @db.Date
+  valorParcela    Decimal   @db.Decimal(18, 2)
+  valorAmortizacao Decimal  @db.Decimal(18, 2)
+  valorJuros      Decimal   @db.Decimal(18, 2)
+  saldoDevedor    Decimal   @db.Decimal(18, 2)
+  dataPagamento   DateTime? @db.Date
+  valorPago       Decimal?  @db.Decimal(18, 2)
+  status          String    @default("PENDENTE") @db.VarChar(20)
+
+  emprestimo Emprestimo @relation(fields: [emprestimoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("parcelas_emprestimo")
+}
+
+// ============================================================
+// PARCELAMENTO DE IMPOSTOS
+// ============================================================
+
+model ParcelamentoImposto {
+  id              Int       @id @default(autoincrement())
+  empresaId       Int
+  tipoImposto     String    @db.VarChar(30)
+  orgaoCredor     String    @db.NVarChar(100)
+  modalidade      String    @db.NVarChar(100) // ORDINARIO, REFIS, PERT etc
+  numeroProcesso  String?   @db.VarChar(50)
+  valorTotal      Decimal   @db.Decimal(18, 2)
+  numeroParcelas  Int
+  indiceCorrecao  String?   @db.VarChar(20) // SELIC, CDI, FIXO
+  dataInicio      DateTime  @db.Date
+  saldoDevedor    Decimal   @db.Decimal(18, 2)
+  status          String    @default("ATIVO") @db.VarChar(20)
+  observacoes     String?   @db.NVarChar(Max)
+  criadoEm        DateTime  @default(now())
+  atualizadoEm    DateTime  @updatedAt
+
+  empresa   Empresa                    @relation(fields: [empresaId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  parcelas  ParcelaParcelamentoImposto[]
+
+  @@map("parcelamentos_imposto")
+}
+
+model ParcelaParcelamentoImposto {
+  id                    Int       @id @default(autoincrement())
+  parcelamentoImpostoId Int
+  numero                Int
+  dataVencimento        DateTime  @db.Date
+  valor                 Decimal   @db.Decimal(18, 2)
+  dataPagamento         DateTime? @db.Date
+  valorPago             Decimal?  @db.Decimal(18, 2)
+  status                String    @default("PENDENTE") @db.VarChar(20)
+  comprovanteUrl        String?   @db.VarChar(500)
+
+  parcelamento ParcelamentoImposto @relation(fields: [parcelamentoImpostoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("parcelas_parcelamento_imposto")
+}
+
+// ============================================================
+// APURACAO DE IMPOSTOS
+// ============================================================
+
+model ApuracaoImposto {
+  id            Int      @id @default(autoincrement())
+  empresaId     Int
+  competencia   String   @db.VarChar(7) // YYYY-MM
+  tipoImposto   String   @db.VarChar(30)
+  baseCalculo   Decimal  @db.Decimal(18, 2)
+  aliquota      Decimal  @db.Decimal(8, 4)
+  valorDevido   Decimal  @db.Decimal(18, 2)
+  deducoes      Decimal  @default(0) @db.Decimal(18, 2)
+  valorPagar    Decimal  @db.Decimal(18, 2)
+  status        String   @default("CALCULADO") @db.VarChar(20)
+  detalhes      String?  @db.NVarChar(Max) // JSON
+  criadoEm      DateTime @default(now())
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([empresaId, competencia, tipoImposto])
+  @@map("apuracoes_imposto")
+}
+
+// ============================================================
+// CONCILIACAO BANCARIA
+// ============================================================
+
+model ConciliacaoBancaria {
+  id              Int      @id @default(autoincrement())
+  empresaId       Int
+  contaBancariaId Int
+  dataImportacao  DateTime @default(now())
+  arquivo         String?  @db.VarChar(255)
+  formato         String   @db.VarChar(10) // OFX, CSV, CNAB
+  totalItens      Int      @default(0)
+  itensConciliados Int     @default(0)
+  status          String   @default("PENDENTE") @db.VarChar(20)
+
+  empresa       Empresa         @relation(fields: [empresaId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  contaBancaria ContaBancaria   @relation(fields: [contaBancariaId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  itens         ConciliacaoItem[]
+
+  @@map("conciliacoes_bancarias")
+}
+
+model ConciliacaoItem {
+  id               Int       @id @default(autoincrement())
+  conciliacaoId    Int
+  data             DateTime  @db.Date
+  descricao        String    @db.NVarChar(500)
+  valor            Decimal   @db.Decimal(18, 2)
+  tipo             String    @db.VarChar(10) // CREDITO, DEBITO
+  contaPagarId     Int?      @unique
+  contaReceberId   Int?      @unique
+  conciliado       Boolean   @default(false)
+  conciliadoEm     DateTime?
+
+  conciliacao  ConciliacaoBancaria @relation(fields: [conciliacaoId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  contaPagar   ContaPagar?         @relation(fields: [contaPagarId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  contaReceber ContaReceber?       @relation(fields: [contaReceberId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("conciliacao_itens")
+}
+
+// ============================================================
+// AUDIT LOG
+// ============================================================
+
+model AuditLog {
+  id          Int      @id @default(autoincrement())
+  usuarioId   Int
+  empresaId   Int
+  acao        String   @db.VarChar(20) // CRIAR, ATUALIZAR, EXCLUIR
+  entidade    String   @db.VarChar(50)
+  entidadeId  Int?
+  dadosAntes  String?  @db.NVarChar(Max)
+  dadosDepois String?  @db.NVarChar(Max)
+  ip          String?  @db.VarChar(45)
+  criadoEm    DateTime @default(now())
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([empresaId, criadoEm])
+  @@index([entidade, entidadeId])
+  @@map("audit_logs")
+}
