@@ -62,7 +62,7 @@ export default function App() {
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <BrowserRouter>
+          <BrowserRouter basename={import.meta.env.BASE_URL}>
             <Suspense fallback={<LoadingSpinner fullPage />}>
               <Routes>
                 <Route element={<AuthLayout />}>
