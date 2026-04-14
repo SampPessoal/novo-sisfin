@@ -1,0 +1,13 @@
+services:
+  - type: web
+    runtime: node
+    name: sisfin-api
+    repo: https://github.com/SampPessoal/novo-sisfin
+    rootDir: backend
+    plan: free
+    buildCommand: npm ci && npx prisma generate && npx tsc
+    startCommand: npx prisma migrate deploy && node dist/app.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
