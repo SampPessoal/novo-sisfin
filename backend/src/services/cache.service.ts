@@ -9,6 +9,8 @@ function getRedis(): Redis {
     redis = new Redis({
       host: env.REDIS_HOST,
       port: env.REDIS_PORT,
+      password: env.REDIS_PASSWORD || undefined,
+      tls: env.REDIS_TLS === 'true' ? {} : undefined,
       maxRetriesPerRequest: 3,
       retryStrategy: (times) => Math.min(times * 200, 5000),
     });

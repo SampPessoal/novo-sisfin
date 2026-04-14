@@ -5,6 +5,8 @@ import { logger } from '../config/logger';
 const connection = {
   host: env.REDIS_HOST,
   port: env.REDIS_PORT,
+  password: env.REDIS_PASSWORD || undefined,
+  tls: env.REDIS_TLS === 'true' ? {} : undefined,
 };
 
 const queues = new Map<string, Queue>();

@@ -13,6 +13,8 @@ const envSchema = z.object({
   JWT_REFRESH_EXPIRES_IN: z.string().default('7d'),
   REDIS_HOST: z.string().default('localhost'),
   REDIS_PORT: z.coerce.number().default(6379),
+  REDIS_PASSWORD: z.string().optional().default(''),
+  REDIS_TLS: z.string().optional().default(''),
   FRONTEND_URL: z.string().default('http://localhost:5173'),
   STORAGE_PROVIDER: z.enum(['s3', 'azure', 'local']).default('local'),
   AWS_ACCESS_KEY_ID: z.string().optional(),
